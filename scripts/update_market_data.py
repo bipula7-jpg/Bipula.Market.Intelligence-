@@ -1,454 +1,307 @@
 #!/usr/bin/env python3
 """
 SIGNAL Market Intelligence — Daily Auto-Update Script
-Runs via GitHub Actions every weekday after market close.
-Fetches live data and rewrites index.html with current market data.
+Uses yfinance with robust retry logic for GitHub Actions.
 """
 
-import json
-import os
-import re
-import sys
-from datetime import datetime, timedelta
+import json, os, re, sys, time, random
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import requests
-import yfinance as yf
-
-# ── Timezone ────────────────────────────────────────────────────────────────
 ET = ZoneInfo("America/New_York")
 now_et = datetime.now(ET)
-TODAY = now_et.strftime("%b %-d, %Y")        # e.g. "Jun 8, 2026"
-TODAY_ISO = now_et.strftime("%Y-%m-%d")
-TODAY_SHORT = now_et.strftime("%-m/%-d")
-MONTH_YEAR = now_et.strftime("%b %Y")
+TODAY      = now_et.strftime("%b %-d, %Y")
+TODAY_ISO  = now_et.strftime("%Y-%m-%d")
+
+# ── Fetch with retry ─────────────────────────────────────────────────────────
+def fetch_all():
+    import yfinance as yf
+
+    SYMBOLS = [
+        "^GSPC","^DJI","^IXIC","^RUT","^VIX",
+        "^TNX","^TYX","GC=F","CL=F","BZ=F","BTC-USD",
+        "KO","CL","JNJ","XOM","META","NVDA","AVGO","GOOGL","MSFT"
+    ]
+
+    for attempt in range(3):
+        try:
+            print(f"Fetching data (attempt {attempt+1})...")
+            # Download all at once — more reliable than tickers object
+            raw = yf.download(
+                SYMBOLS,
+                period="5d",
+                interval="1d",
+                group_by="ticker",
+                auto_adjust=True,
+                progress=False,
+                timeout=30
+            )
+            return raw, SYMBOLS
+        except Exception as e:
+            print(f"Attempt {attempt+1} failed: {e}")
+            time.sleep(5 + random.uniform(1,4))
+
+    raise RuntimeError("All fetch attempts failed")
 
 
-# ── Ticker symbols to fetch ─────────────────────────────────────────────────
-SYMBOLS = {
-    "^GSPC":  "sp500",
-    "^DJI":   "dow",
-    "^IXIC":  "nasdaq",
-    "^RUT":   "russell",
-    "^VIX":   "vix",
-    "^TNX":   "t10y",
-    "^TYX":   "t30y",
-    "GC=F":   "gold",
-    "CL=F":   "wti",
-    "BZ=F":   "brent",
-    "BTC-USD":"btc",
-    # Equities
-    "KO": "ko", "CL": "cl_eq", "JNJ": "jnj",
-    "XOM": "xom", "META": "meta", "NVDA": "nvda",
-    "AVGO": "avgo", "GOOGL": "googl", "MSFT": "msft",
-}
+def get_price_chg(raw, sym):
+    """Extract latest close and % change for a symbol."""
+    try:
+        if sym in raw.columns.get_level_values(0):
+            closes = raw[sym]["Close"].dropna()
+        else:
+            closes = raw["Close"][sym].dropna() if "Close" in raw else None
+        if closes is None or len(closes) < 2:
+            return 0.0, 0.0
+        price = float(closes.iloc[-1])
+        prev  = float(closes.iloc[-2])
+        pct   = (price - prev) / prev * 100
+        return price, pct
+    except Exception as e:
+        print(f"  Could not parse {sym}: {e}")
+        return 0.0, 0.0
 
-def pct_str(val):
-    sign = "+" if val >= 0 else ""
-    return f"{sign}{val:.2f}%"
 
-def fmt_price(val, prefix=""):
-    if val >= 1000:
-        return f"{prefix}{val:,.2f}"
-    return f"{prefix}{val:.2f}"
+def pct_str(v):
+    return f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%"
 
-def color_class(pct):
+def cc(pct):  # color class
     return "up" if pct >= 0 else "dn"
 
-def signal_class(pct):
-    if pct >= 0.5:
-        return "bull"
-    elif pct <= -0.5:
-        return "bear"
-    return "neut"
+def sc(pct):  # signal class
+    return "bull" if pct >= 0.5 else "bear" if pct <= -0.5 else "neut"
 
 
-def fetch_data():
-    """Fetch all market data from yfinance."""
-    print("Fetching market data...")
-    tickers = yf.Tickers(" ".join(SYMBOLS.keys()))
-    data = {}
-
-    for sym, key in SYMBOLS.items():
-        try:
-            t = tickers.tickers[sym]
-            hist = t.history(period="2d", interval="1d")
-            if len(hist) < 2:
-                hist = t.history(period="5d", interval="1d")
-
-            close = float(hist["Close"].iloc[-1])
-            prev  = float(hist["Close"].iloc[-2])
-            chg   = close - prev
-            pct   = (chg / prev) * 100
-
-            data[key] = {
-                "price": close,
-                "change": chg,
-                "pct": pct,
-                "prev": prev,
-            }
-            print(f"  {sym}: {close:.2f} ({pct:+.2f}%)")
-        except Exception as e:
-            print(f"  WARNING: Could not fetch {sym}: {e}")
-            data[key] = {"price": 0, "change": 0, "pct": 0, "prev": 0}
-
-    return data
-
-
-def build_ticker_bar(d):
-    """Build the JS TICKS array."""
-    def tk(sym, val, chg_str, up):
-        u = "true" if up else "false"
-        return f'  {{s:"{sym}",v:"{val}",c:"{chg_str}",u:{u}}}'
-
-    sp = d["sp500"]
-    dw = d["dow"]
-    nq = d["nasdaq"]
-    ru = d["russell"]
-    vx = d["vix"]
-    t10 = d["t10y"]
-    t30 = d["t30y"]
-    wti = d["wti"]
-    gld = d["gold"]
-    btc = d["btc"]
-    br  = d["brent"]
-
-    lines = [
-        tk("S&P 500",   f"{sp['price']:,.2f}",  pct_str(sp['pct']),  sp['pct']>=0),
-        tk("DOW",       f"{dw['price']:,.2f}",  pct_str(dw['pct']),  dw['pct']>=0),
-        tk("NASDAQ",    f"{nq['price']:,.2f}",  pct_str(nq['pct']),  nq['pct']>=0),
-        tk("RUSSELL 2K",f"{ru['price']:,.2f}",  pct_str(ru['pct']),  ru['pct']>=0),
-        tk("VIX",       f"{vx['price']:.2f}",   pct_str(vx['pct']),  vx['pct']>=0),
-        tk("10Y YIELD", f"{t10['price']:.2f}%", pct_str(t10['pct']), t10['pct']>=0),
-        tk("30Y YIELD", f"{t30['price']:.2f}%", pct_str(t30['pct']), t30['pct']>=0),
-        tk("WTI CRUDE", f"${wti['price']:.2f}", pct_str(wti['pct']), wti['pct']>=0),
-        tk("GOLD",      f"${gld['price']:,.0f}",pct_str(gld['pct']), gld['pct']>=0),
-        tk("BITCOIN",   f"${btc['price']:,.0f}",pct_str(btc['pct']), btc['pct']>=0),
-        tk("BRENT",     f"${br['price']:.2f}",  pct_str(br['pct']),  br['pct']>=0),
-    ]
-    return "[\n" + ",\n".join(lines) + "\n]"
-
-
-def build_sidebar(d):
-    sp = d["sp500"]; dw = d["dow"]; nq = d["nasdaq"]; ru = d["russell"]
-    t10 = d["t10y"]; t30 = d["t30y"]; wti = d["wti"]; br = d["brent"]
-    gld = d["gold"]; vx = d["vix"]; btc = d["btc"]
-
-    def si(label, val, pct, page="macro"):
-        cls = color_class(pct)
-        return f'      <div class="si" onclick="go(\'{page}\',null)"><span class="sn">{label}</span><span class="sv {cls}">{val}</span></div>'
-
+# ── HTML builders ─────────────────────────────────────────────────────────────
+def sidebar(d):
+    def row(label, val, pct, page="macro"):
+        return f'      <div class="si" onclick="go(\'{page}\',null)"><span class="sn">{label}</span><span class="sv {cc(pct)}">{val}</span></div>'
+    sp=d["^GSPC"]; dw=d["^DJI"]; nq=d["^IXIC"]; ru=d["^RUT"]
+    t10=d["^TNX"]; t30=d["^TYX"]; wti=d["CL=F"]; br=d["BZ=F"]
+    gld=d["GC=F"]; vx=d["^VIX"]; btc=d["BTC-USD"]
     return f"""    <div class="ss">
       <div class="sl">Indices</div>
-{si("S&P 500",   f"{sp['price']:,.0f}", sp['pct'])}
-{si("Dow Jones", f"{dw['price']:,.0f}", dw['pct'])}
-{si("Nasdaq",    f"{nq['price']:,.0f}", nq['pct'])}
-{si("Russell 2K",f"{ru['price']:,.0f}", ru['pct'])}
+{row("S&P 500",   f"{sp[0]:,.0f}",  sp[1])}
+{row("Dow Jones", f"{dw[0]:,.0f}",  dw[1])}
+{row("Nasdaq",    f"{nq[0]:,.0f}",  nq[1])}
+{row("Russell 2K",f"{ru[0]:,.0f}",  ru[1])}
     </div>
     <div class="ss">
       <div class="sl">Rates</div>
-{si("10Y Yield", f"{t10['price']:.2f}%", t10['pct'], 'rates')}
-{si("Fed Rate",  "3.75%", 0, 'rates')}
-{si("30Y Yield", f"{t30['price']:.2f}%", t30['pct'], 'rates')}
+{row("10Y Yield", f"{t10[0]:.2f}%", t10[1], "rates")}
+{row("Fed Rate",  "3.75%", 0, "rates")}
+{row("30Y Yield", f"{t30[0]:.2f}%", t30[1], "rates")}
     </div>
     <div class="ss">
       <div class="sl">Commodities</div>
-      <div class="si"><span class="sn">WTI Crude</span><span class="sv {color_class(wti['pct'])}">${wti['price']:.2f}</span></div>
-      <div class="si"><span class="sn">Brent</span><span class="sv {color_class(br['pct'])}">${br['price']:.2f}</span></div>
-      <div class="si"><span class="sn">Gold</span><span class="sv {color_class(gld['pct'])}">${gld['price']:,.0f}</span></div>
+      <div class="si"><span class="sn">WTI Crude</span><span class="sv {cc(wti[1])}">${wti[0]:.2f}</span></div>
+      <div class="si"><span class="sn">Brent</span><span class="sv {cc(br[1])}">${br[0]:.2f}</span></div>
+      <div class="si"><span class="sn">Gold</span><span class="sv {cc(gld[1])}">${gld[0]:,.0f}</span></div>
     </div>
     <div class="ss">
       <div class="sl">Sentiment</div>
-      <div class="si"><span class="sn">VIX</span><span class="sv {color_class(vx['pct'])}">{vx['price']:.2f}</span></div>
-      <div class="si"><span class="sn">Bitcoin</span><span class="sv {color_class(btc['pct'])}">${btc['price']:,.0f}</span></div>
+      <div class="si"><span class="sn">VIX</span><span class="sv {cc(vx[1])}">{vx[0]:.2f}</span></div>
+      <div class="si"><span class="sn">Bitcoin</span><span class="sv {cc(btc[1])}">${btc[0]:,.0f}</span></div>
     </div>"""
 
 
-def build_macro_cards(d):
-    sp = d["sp500"]; dw = d["dow"]; nq = d["nasdaq"]; ru = d["russell"]
-    t10 = d["t10y"]; t30 = d["t30y"]; wti = d["wti"]; gld = d["gold"]
-    br = d["brent"]; btc = d["btc"]; vx = d["vix"]
+def macro_cards(d):
+    sp=d["^GSPC"]; dw=d["^DJI"]; nq=d["^IXIC"]; ru=d["^RUT"]
+    t10=d["^TNX"]; t30=d["^TYX"]; wti=d["CL=F"]; br=d["BZ=F"]
+    gld=d["GC=F"]; vx=d["^VIX"]; btc=d["BTC-USD"]
 
-    def card(label, val, chg_line, note, source):
-        cls = "dn" if "-" in chg_line else "up"
-        return f'''        <div class="card"><div class="cl">{label}</div><div class="cv {cls}">{val}</div><div class="cc {cls}">{chg_line}</div><div class="cs">{note}</div><div class="cs">{source} &middot; {TODAY}</div></div>'''
+    def card(label, val, line1, note, src):
+        cls = cc(float(line1.replace("+","").replace("%","").split()[0].replace("−","−")) if "%" in line1 else 0)
+        up = "+" in line1 or (line1 and line1[0] not in ["-","−"])
+        cls2 = "up" if up else "dn"
+        return f'        <div class="card"><div class="cl">{label}</div><div class="cv {cls2}">{val}</div><div class="cc {cls2}">{line1}</div><div class="cs">{note}</div><div class="cs">{src} &middot; {TODAY}</div></div>'
 
-    sp_chg = f"{'−' if sp['pct']<0 else '+'}{abs(sp['pct']):.2f}% today"
-    dw_chg = f"{'−' if dw['pct']<0 else '+'}{abs(dw['pct']):.2f}% &middot; {'-' if dw['change']<0 else '+'}{abs(dw['change']):,.0f} pts"
-    nq_chg = f"{'−' if nq['pct']<0 else '+'}{abs(nq['pct']):.2f}% today"
-    ru_chg = f"{'−' if ru['pct']<0 else '+'}{abs(ru['pct']):.2f}% today"
-    t10_chg= f"{pct_str(t10['pct'])} &middot; {t10['price']:.2f}%"
-    t30_chg= f"{t30['price']:.2f}% {'(broke 5%)' if t30['price']>=5 else ''}"
-    vx_chg = f"{pct_str(vx['pct'])} &middot; {'Fear spike' if vx['pct']>10 else 'Elevated' if vx['price']>20 else 'Moderate'}"
-    wti_chg= f"{pct_str(wti['pct'])} &middot; ${wti['price']:.2f}/bbl"
-    gld_chg= f"{pct_str(gld['pct'])} &middot; ${gld['price']:,.0f}/oz"
-    btc_chg= f"{pct_str(btc['pct'])} &middot; ${btc['price']:,.0f}"
-
-    cards = [
-        card("S&P 500",          f"{sp['price']:,.2f}",  sp_chg,  "Broad market benchmark",         "Yahoo Finance"),
-        card("Dow Jones",        f"{dw['price']:,.2f}",  dw_chg,  "30 blue-chip stocks",            "CNBC"),
-        card("Nasdaq Composite", f"{nq['price']:,.2f}",  nq_chg,  "Tech-heavy index",               "CNBC"),
-        card("Russell 2000",     f"{ru['price']:,.2f}",  ru_chg,  "Small-cap benchmark",            "Yahoo Finance"),
-        card("10Y Treasury Yield",f"{t10['price']:.2f}%",t10_chg, "Key rate benchmark",             "Yahoo Finance"),
-        card("30Y Treasury Yield",f"{t30['price']:.2f}%",t30_chg, "Long-duration rate indicator",   "TheStreet"),
-        card("VIX Fear Index",   f"{vx['price']:.2f}",  vx_chg,  "Market volatility gauge",        "Yahoo Finance"),
-        card("WTI Crude Oil",    f"${wti['price']:.2f}", wti_chg, "US benchmark crude",             "TradingEconomics"),
-        card("Brent Crude",      f"${br['price']:.2f}",  pct_str(br['pct']), "Global crude benchmark","TradingEconomics"),
-        card("Gold Spot",        f"${gld['price']:,.0f}",gld_chg, "Safe-haven metal",               "Yahoo Finance"),
-        card("Bitcoin",          f"${btc['price']:,.0f}",btc_chg, "Leading crypto asset",           "Yahoo Finance"),
+    rows = [
+        card("S&P 500",          f"{sp[0]:,.2f}",  f"{pct_str(sp[1])} today",           "Broad market benchmark",       "Yahoo Finance"),
+        card("Dow Jones",        f"{dw[0]:,.2f}",  f"{pct_str(dw[1])} &middot; {dw[0]-dw[0]/(1+dw[1]/100):+,.0f} pts", "30 blue-chip stocks", "CNBC"),
+        card("Nasdaq Composite", f"{nq[0]:,.2f}",  f"{pct_str(nq[1])} today",           "Tech-heavy index",             "CNBC"),
+        card("Russell 2000",     f"{ru[0]:,.2f}",  f"{pct_str(ru[1])} today",           "Small-cap benchmark",          "Yahoo Finance"),
+        card("10Y Treasury",     f"{t10[0]:.2f}%", f"{pct_str(t10[1])} &middot; {t10[0]:.2f}%", "Key rate benchmark",  "Yahoo Finance"),
+        card("30Y Treasury",     f"{t30[0]:.2f}%", f"{t30[0]:.2f}% {'(above 5%)' if t30[0]>=5 else ''}","Long-duration rate","TheStreet"),
+        card("VIX Fear Index",   f"{vx[0]:.2f}",   f"{pct_str(vx[1])} &middot; {'Fear' if vx[0]>25 else 'Elevated' if vx[0]>18 else 'Calm'}", "Volatility gauge","Yahoo Finance"),
+        card("WTI Crude",        f"${wti[0]:.2f}", f"{pct_str(wti[1])} &middot; ${wti[0]:.2f}/bbl","US benchmark crude","TradingEconomics"),
+        card("Brent Crude",      f"${br[0]:.2f}",  f"{pct_str(br[1])}",                 "Global crude benchmark",       "TradingEconomics"),
+        card("Gold Spot",        f"${gld[0]:,.0f}",f"{pct_str(gld[1])} &middot; ${gld[0]:,.0f}/oz","Safe-haven metal", "Yahoo Finance"),
+        card("Bitcoin",          f"${btc[0]:,.0f}",f"{pct_str(btc[1])} &middot; ${btc[0]:,.0f}", "Leading crypto",    "Yahoo Finance"),
     ]
-    return "\n".join(cards)
+    return "\n".join(rows)
 
 
-def build_equities_js(d):
-    """Build JS EQ array with live stock data."""
+def ticker_js(d):
+    sp=d["^GSPC"]; dw=d["^DJI"]; nq=d["^IXIC"]; ru=d["^RUT"]
+    t10=d["^TNX"]; t30=d["^TYX"]; wti=d["CL=F"]; br=d["BZ=F"]
+    gld=d["GC=F"]; vx=d["^VIX"]; btc=d["BTC-USD"]
+    def tk(s,v,c,u): return f'  {{s:"{s}",v:"{v}",c:"{c}",u:{"true" if u else "false"}}}'
+    rows = [
+        tk("S&P 500",   f"{sp[0]:,.2f}",  pct_str(sp[1]),  sp[1]>=0),
+        tk("DOW",       f"{dw[0]:,.2f}",  pct_str(dw[1]),  dw[1]>=0),
+        tk("NASDAQ",    f"{nq[0]:,.2f}",  pct_str(nq[1]),  nq[1]>=0),
+        tk("RUSSELL 2K",f"{ru[0]:,.2f}",  pct_str(ru[1]),  ru[1]>=0),
+        tk("VIX",       f"{vx[0]:.2f}",   pct_str(vx[1]),  vx[1]>=0),
+        tk("10Y YIELD", f"{t10[0]:.2f}%", pct_str(t10[1]), t10[1]>=0),
+        tk("30Y YIELD", f"{t30[0]:.2f}%", pct_str(t30[1]), t30[1]>=0),
+        tk("WTI CRUDE", f"${wti[0]:.2f}", pct_str(wti[1]), wti[1]>=0),
+        tk("GOLD",      f"${gld[0]:,.0f}",pct_str(gld[1]), gld[1]>=0),
+        tk("BITCOIN",   f"${btc[0]:,.0f}",pct_str(btc[1]), btc[1]>=0),
+        tk("BRENT",     f"${br[0]:.2f}",  pct_str(br[1]),  br[1]>=0),
+    ]
+    return "[\n" + ",\n".join(rows) + "\n]"
+
+
+def equities_js(d):
     stocks = [
-        ("KO",   "ko",    "Coca-Cola",       "def"),
-        ("CL",   "cl_eq", "Colgate-Palmolive","def"),
-        ("JNJ",  "jnj",   "Johnson & Johnson","def"),
-        ("XOM",  "xom",   "ExxonMobil",      "def"),
-        ("META", "meta",  "Meta Platforms",  "tech"),
-        ("NVDA", "nvda",  "Nvidia",          "tech"),
-        ("AVGO", "avgo",  "Broadcom",        "tech"),
-        ("GOOGL","googl", "Alphabet",        "tech"),
-        ("MSFT", "msft",  "Microsoft",       "tech"),
-        ("BTC-USD","btc", "Bitcoin",         "crypto"),
+        ("KO","KO","Coca-Cola","def"),("CL","CL","Colgate-Palmolive","def"),
+        ("JNJ","JNJ","Johnson & Johnson","def"),("XOM","XOM","ExxonMobil","def"),
+        ("META","META","Meta Platforms","tech"),("NVDA","NVDA","Nvidia","tech"),
+        ("AVGO","AVGO","Broadcom","tech"),("GOOGL","GOOGL","Alphabet","tech"),
+        ("MSFT","MSFT","Microsoft","tech"),("BTC-USD","BTC-USD","Bitcoin","crypto"),
     ]
-
-    lines = []
-    for sym, key, name, sec in stocks:
-        price = d[key]["price"]
-        pct   = d[key]["pct"]
-        sig   = signal_class(pct)
-        sign  = "+" if pct >= 0 else ""
-        chg_str = f"{sign}{pct:.1f}%"
-        note = f"{name} {chg_str} on {TODAY}."
-        lines.append(f'  {{t:"{sym}",n:"{name}",sec:"{sec}",s:"{sig}",c:"{chg_str}",note:"{note}"}}')
-
-    return "[\n" + ",\n".join(lines) + "\n]"
+    rows=[]
+    for sym,key,name,sec in stocks:
+        p,pct=d.get(key,(0,0))
+        s=sc(pct); sign="+" if pct>=0 else ""
+        chg=f"{sign}{pct:.1f}%"
+        note=f"{name} {chg} on {TODAY}."
+        rows.append(f'  {{t:"{sym}",n:"{name}",sec:"{sec}",s:"{s}",c:"{chg}",note:"{note}"}}')
+    return "[\n"+",\n".join(rows)+"\n]"
 
 
-def build_ai_system_prompt(d):
-    """Build the AI system prompt with today's live data."""
-    sp = d["sp500"]; dw = d["dow"]; nq = d["nasdaq"]; ru = d["russell"]
-    t10 = d["t10y"]; t30 = d["t30y"]; gld = d["gold"]; wti = d["wti"]
-    btc = d["btc"]; vx = d["vix"]; br = d["brent"]
+def sectors_js(d):
+    sp_pct=d["^GSPC"][1]; nq_pct=d["^IXIC"][1]
+    secs=[
+        {"n":"Consumer Staples","y":round(sp_pct*0.25,1),"d":"Defensive staples — low beta to broad market"},
+        {"n":"Healthcare",      "y":round(sp_pct*0.35,1),"d":"Defensive bid; biotech and managed care"},
+        {"n":"Energy",          "y":round(sp_pct*0.55,1),"d":f"Tied to WTI at ${d['CL=F'][0]:.2f} and geopolitics"},
+        {"n":"Financials",      "y":round(sp_pct*0.75,1),"d":f"Rate-sensitive; 10Y at {d['^TNX'][0]:.2f}%"},
+        {"n":"Industrials",     "y":round(sp_pct*0.85,1),"d":"Capex-heavy names react to yield moves"},
+        {"n":"Comm. Services",  "y":round(sp_pct*0.95,1),"d":"Meta, Alphabet drive sector"},
+        {"n":"Materials",       "y":round(sp_pct*1.05,1),"d":"Commodity prices key driver"},
+        {"n":"Real Estate",     "y":round(sp_pct*1.25,1),"d":f"30Y at {d['^TYX'][0]:.2f}% — REIT headwind"},
+        {"n":"Consumer Disc.",  "y":round(sp_pct*1.15,1),"d":"Rate-sensitive consumer spending"},
+        {"n":"Utilities",       "y":round(sp_pct*1.35,1),"d":"Bond proxy — moves with yields"},
+        {"n":"Technology",      "y":round(nq_pct*0.95,1),"d":f"Nasdaq {pct_str(nq_pct)} — AI capex narrative"},
+    ]
+    secs.sort(key=lambda x:x["y"],reverse=True)
+    rows=[f'  {{n:"{s["n"]}",y:{s["y"]},s:"{sc(s["y"])}",d:"{s["d"]}"}}' for s in secs]
+    return "[\n"+",\n".join(rows)+"\n]"
 
-    prompt = f"""You are SIGNAL, a financial intelligence platform. Today is {TODAY}. Live market data updated automatically via GitHub Actions + yfinance.
+
+def spx_chart(d):
+    import random as rnd
+    rnd.seed(int(datetime.now().strftime("%Y%m%d")))
+    close=d["^GSPC"][0]
+    def gen(n,vol):
+        pts=[close]
+        for _ in range(n-1):
+            pts.insert(0, pts[0]*(1+rnd.uniform(-vol,vol*0.85)))
+        return [round(p,2) for p in pts]
+    return f'{{"1m":{gen(15,0.006)},"3m":{gen(15,0.012)},"6m":{gen(15,0.018)}}}'
+
+
+def ai_prompt(d):
+    sp=d["^GSPC"]; dw=d["^DJI"]; nq=d["^IXIC"]; ru=d["^RUT"]
+    t10=d["^TNX"]; t30=d["^TYX"]; wti=d["CL=F"]; br=d["BZ=F"]
+    gld=d["GC=F"]; vx=d["^VIX"]; btc=d["BTC-USD"]
+    p = f"""You are SIGNAL, a financial intelligence platform. Today is {TODAY}. Live market data updated automatically daily via GitHub Actions.
 
 MARKET DATA {TODAY}:
-S&P 500: {sp['price']:,.2f} ({pct_str(sp['pct'])})
-Nasdaq Composite: {nq['price']:,.2f} ({pct_str(nq['pct'])})
-Dow Jones: {dw['price']:,.2f} ({pct_str(dw['pct'])}, {dw['change']:+,.0f} pts)
-Russell 2000: {ru['price']:,.2f} ({pct_str(ru['pct'])})
-VIX: {vx['price']:.2f} ({pct_str(vx['pct'])})
-10Y Treasury Yield: {t10['price']:.2f}%
-30Y Treasury Yield: {t30['price']:.2f}%
-WTI Crude: ${wti['price']:.2f}
-Brent Crude: ${br['price']:.2f}
-Gold: ${gld['price']:,.0f}
-Bitcoin: ${btc['price']:,.0f} ({pct_str(btc['pct'])})
-Fed Funds Rate: 3.75% (held at last FOMC)
+S&P 500: {sp[0]:,.2f} ({pct_str(sp[1])})
+Nasdaq: {nq[0]:,.2f} ({pct_str(nq[1])})
+Dow Jones: {dw[0]:,.2f} ({pct_str(dw[1])})
+Russell 2000: {ru[0]:,.2f} ({pct_str(ru[1])})
+VIX: {vx[0]:.2f} ({pct_str(vx[1])})
+10Y Treasury: {t10[0]:.2f}%
+30Y Treasury: {t30[0]:.2f}%
+WTI Crude: ${wti[0]:.2f}
+Brent: ${br[0]:.2f}
+Gold: ${gld[0]:,.0f}
+Bitcoin: ${btc[0]:,.0f} ({pct_str(btc[1])})
+Fed Funds Rate: 3.75%
 
-Data source: yfinance / Yahoo Finance. Updated automatically after market close each trading day.
-Provide sharp, data-driven analysis. This is not personalized investment advice."""
-
-    # Escape for JS string
-    prompt = prompt.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-    return prompt
+Provide sharp, data-driven market analysis. Not personalized investment advice."""
+    return p.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n")
 
 
-def build_sectors_js(d):
-    """Build sector performance data based on live index moves."""
-    sp_pct = d["sp500"]["pct"]
-    nq_pct = d["nasdaq"]["pct"]
-
-    # Estimate sector moves relative to broad market (simplified)
-    sectors = [
-        {"n": "Consumer Staples", "y": round(sp_pct * 0.3, 1),  "d": "Defensive staples — lower beta to broad market"},
-        {"n": "Healthcare",       "y": round(sp_pct * 0.4, 1),  "d": "Defensive bid; biotech and managed care diverge"},
-        {"n": "Energy",           "y": round(sp_pct * 0.6, 1),  "d": f"Tied to WTI at ${d['wti']['price']:.2f} and geopolitical risk"},
-        {"n": "Financials",       "y": round(sp_pct * 0.8, 1),  "d": f"Rate-sensitive; 10Y at {d['t10y']['price']:.2f}% affects NIM"},
-        {"n": "Industrials",      "y": round(sp_pct * 0.9, 1),  "d": "Capex-heavy names react to yield moves"},
-        {"n": "Comm. Services",   "y": round(sp_pct * 1.0, 1),  "d": "Meta, Alphabet drag; ad spend sensitivity"},
-        {"n": "Materials",        "y": round(sp_pct * 1.1, 1),  "d": "Copper and commodity prices key driver"},
-        {"n": "Real Estate",      "y": round(sp_pct * 1.3, 1),  "d": f"30Y at {d['t30y']['price']:.2f}% — major headwind for REITs"},
-        {"n": "Consumer Disc.",   "y": round(sp_pct * 1.2, 1),  "d": "Rate-sensitive consumer spending names"},
-        {"n": "Utilities",        "y": round(sp_pct * 1.4, 1),  "d": "Bond proxy crushed when yields rise"},
-        {"n": "Technology",       "y": round(nq_pct * 1.0, 1),  "d": f"Nasdaq {pct_str(nq_pct)} — AI capex narrative under pressure"},
-    ]
-
-    # Sort best to worst
-    sectors.sort(key=lambda x: x["y"], reverse=True)
-
-    lines = []
-    for s in sectors:
-        sig = signal_class(s["y"])
-        lines.append(f'  {{n:"{s["n"]}",y:{s["y"]},s:"{sig}",d:"{s["d"]}"}}')
-    return "[\n" + ",\n".join(lines) + "\n]"
-
-
-def build_spx_chart_data(d):
-    """Generate realistic SPX chart data anchored to today's close."""
-    close = d["sp500"]["price"]
-
-    # Simple backward projection for chart — purely illustrative trend
-    def gen_series(n_pts, volatility=0.008):
-        import random
-        random.seed(42)  # reproducible
-        prices = [close]
-        for _ in range(n_pts - 1):
-            prices.insert(0, prices[0] * (1 + random.uniform(-volatility, volatility * 0.9)))
-        return [round(p, 2) for p in prices]
-
-    m1 = gen_series(15, 0.006)
-    m3 = gen_series(15, 0.012)
-    m6 = gen_series(15, 0.018)
-
-    return f'{{"1m":{m1},"3m":{m3},"6m":{m6}}}'
-
-
-def generate_html(d, template_path, output_path):
-    """Read template, inject live data, write output."""
-    with open(template_path, "r") as f:
-        html = f.read()
-
-    sp = d["sp500"]; dw = d["dow"]; nq = d["nasdaq"]; ru = d["russell"]
-    t10 = d["t10y"]; t30 = d["t30y"]; wti = d["wti"]; br = d["brent"]
-    gld = d["gold"]; vx = d["vix"]; btc = d["btc"]
-
-    # Date in nav brand
-    html = re.sub(
-        r'(market intelligence &middot; )[^<]+',
-        f'market intelligence &middot; {TODAY.lower()}',
-        html
-    )
-
-    # Nav brand date text (bd class)
-    html = re.sub(
-        r'(<div class="bd">)[^<]+(</div>)',
-        f'\\1market intelligence &middot; {TODAY.lower()}\\2',
-        html
-    )
-
-    # Footer date
-    html = re.sub(
-        r'(SIGNAL &middot; Sources:.*?)June \d+, \d+',
-        f'\\1{TODAY}',
-        html
-    )
-    html = re.sub(
-        r'Data: [A-Za-z]+ \d+, \d+ close',
-        f'Data: {TODAY} close',
-        html
-    )
-
-    # Clock JS — update data date string
-    html = re.sub(
-        r'"Data: [A-Za-z]+ \d+, \d+ close',
-        f'"Data: {TODAY} close',
-        html
-    )
-
-    # Ticker JS array
-    html = re.sub(
-        r'var TICKS=\[[\s\S]*?\];',
-        f'var TICKS={build_ticker_bar(d)};',
-        html
-    )
-
-    # SPX chart data
-    html = re.sub(
-        r'var SPX=\{[^;]+\};',
-        f'var SPX={build_spx_chart_data(d)};',
-        html
-    )
-
-    # Chart label
-    html = re.sub(
-        r'S&amp;P 500 &mdash; [A-Za-z]+ \d+ close: [\d,]+\.?\d* \([^)]+\)',
-        f"S&amp;P 500 &mdash; {TODAY} close: {sp['price']:,.2f} ({pct_str(sp['pct'])})",
-        html
-    )
-
-    # Equities JS
-    html = re.sub(
-        r'var EQ=\[[\s\S]*?\];',
-        f'var EQ={build_equities_js(d)};',
-        html
-    )
-
-    # Sectors JS
-    html = re.sub(
-        r'var SECS=\[[\s\S]*?\];',
-        f'var SECS={build_sectors_js(d)};',
-        html
-    )
-
-    # AI system prompt
-    html = re.sub(
-        r'var SYS="[\s\S]*?";',
-        f'var SYS="{build_ai_system_prompt(d)}";',
-        html
-    )
-
-    # Sidebar
-    sidebar_new = build_sidebar(d)
-    html = re.sub(
-        r'<aside class="side">[\s\S]*?</aside>',
-        f'<aside class="side">\n{sidebar_new}\n  </aside>',
-        html
-    )
-
-    # Macro cards block
-    new_cards = build_macro_cards(d)
-    html = re.sub(
-        r'(<div class="cards">)[\s\S]*?(</div>\s*\n\s*<div class="chart-box">)',
-        f'\\1\n{new_cards}\n      \\2',
-        html
-    )
-
-    # Breaking alert banner — make it generic and date-aware
-    sp_label = "up" if sp['pct'] >= 0 else "down"
-    alert_text = (
-        f"<b>Market Update &mdash; {TODAY}</b> "
-        f"S&amp;P 500 {sp_label} {abs(sp['pct']):.2f}% to {sp['price']:,.2f}. "
-        f"Nasdaq {abs(nq['pct']):.2f}% {'higher' if nq['pct']>=0 else 'lower'}. "
-        f"10Y yield at {t10['price']:.2f}%. Gold ${gld['price']:,.0f}. BTC ${btc['price']:,.0f}."
-    )
-    html = re.sub(
-        r'(<div class="atext">)[\s\S]*?(</div>\s*</div>\s*<div class="hdr">)',
-        f'\\1{alert_text}\\2',
-        html
-    )
-
-    # Update all visible date references in headers/labels
-    html = re.sub(r'June \d+, \d{4}', TODAY, html)
-    html = re.sub(r'Jun \d+, \d{4}', TODAY, html)
-    html = re.sub(r'Jun \d+ \d{4}', TODAY.replace(",", ""), html)
-
-    # Add last-updated meta comment at top
-    html = html.replace(
-        "<!DOCTYPE html>",
-        f"<!DOCTYPE html>\n<!-- SIGNAL auto-updated: {TODAY_ISO} via GitHub Actions -->"
-    )
-
-    with open(output_path, "w") as f:
-        f.write(html)
-
-    print(f"✅ index.html written — {TODAY}")
-
-
+# ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root  = os.path.dirname(script_dir)
-    template   = os.path.join(repo_root, "index.html")
-    output     = os.path.join(repo_root, "index.html")
+    html_path  = os.path.join(repo_root, "index.html")
 
-    data = fetch_data()
-    generate_html(data, template, output)
-    print("Done.")
+    raw, symbols = fetch_all()
 
+    # Build lookup: symbol -> (price, pct)
+    d = {}
+    for sym in symbols:
+        d[sym] = get_price_chg(raw, sym)
+        print(f"  {sym}: ${d[sym][0]:.2f} ({d[sym][1]:+.2f}%)")
+
+    with open(html_path) as f:
+        html = f.read()
+
+    # Add auto-update comment
+    html = html.replace("<!DOCTYPE html>",
+        f"<!DOCTYPE html>\n<!-- SIGNAL auto-updated: {TODAY_ISO} via GitHub Actions -->")
+
+    # Date strings throughout
+    for pat in [r'jun \d+, \d{4}', r'june \d+, \d{4}', r'Jun \d+, \d{4}', r'June \d+, \d{4}']:
+        html = re.sub(pat, TODAY, html, flags=re.IGNORECASE)
+
+    # Nav brand date
+    html = re.sub(r'(market intelligence &middot; )[^\<"]+', f'market intelligence &middot; {TODAY.lower()}', html)
+
+    # Footer
+    html = re.sub(r'Data: [A-Za-z]+ \d+, \d+ close', f'Data: {TODAY} close', html)
+
+    # Ticker bar
+    html = re.sub(r'var TICKS=\[[\s\S]*?\];', f'var TICKS={ticker_js(d)};', html)
+
+    # SPX chart
+    html = re.sub(r'var SPX=\{[^;]+\};', f'var SPX={spx_chart(d)};', html)
+
+    # Chart label
+    sp=d["^GSPC"]
+    html = re.sub(r'S&amp;P 500 &mdash;[^<"]+close:[^<"]+\)',
+        f"S&amp;P 500 &mdash; {TODAY} close: {sp[0]:,.2f} ({pct_str(sp[1])})", html)
+
+    # Equities
+    html = re.sub(r'var EQ=\[[\s\S]*?\];', f'var EQ={equities_js(d)};', html)
+
+    # Sectors
+    html = re.sub(r'var SECS=\[[\s\S]*?\];', f'var SECS={sectors_js(d)};', html)
+
+    # AI system prompt
+    html = re.sub(r'var SYS="[\s\S]*?";', f'var SYS="{ai_prompt(d)}";', html)
+
+    # Sidebar
+    html = re.sub(r'<aside class="side">[\s\S]*?</aside>',
+        f'<aside class="side">\n{sidebar(d)}\n  </aside>', html)
+
+    # Macro cards
+    new_cards = macro_cards(d)
+    html = re.sub(
+        r'(<div class="cards">)[\s\S]*?(</div>\s*\n\s*<div class="chart-box">)',
+        f'\\1\n{new_cards}\n      \\2', html)
+
+    # Alert banner
+    sp_word = "up" if sp[1]>=0 else "down"
+    nq=d["^IXIC"]; t10=d["^TNX"]; gld=d["GC=F"]; btc=d["BTC-USD"]
+    alert = (f"<b>Market Update &mdash; {TODAY}</b> "
+             f"S&amp;P 500 {sp_word} {abs(sp[1]):.2f}% to {sp[0]:,.2f}. "
+             f"Nasdaq {pct_str(nq[1])}. 10Y yield {t10[0]:.2f}%. "
+             f"Gold ${gld[0]:,.0f}. BTC ${btc[0]:,.0f}.")
+    html = re.sub(r'(<div class="atext">)[\s\S]*?(</div>\s*</div>\s*<div class="hdr">)',
+        f'\\1{alert}\\2', html)
+
+    with open(html_path, "w") as f:
+        f.write(html)
+
+    print(f"\n✅ index.html updated — {TODAY}")
 
 if __name__ == "__main__":
     main()
