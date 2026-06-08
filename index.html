@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <!-- SIGNAL auto-updated: 2026-06-08 via GitHub Actions -->
-<!-- SIGNAL auto-updated: 2026-06-08 via GitHub Actions -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -424,15 +423,16 @@ footer{border-top:1px solid var(--border);padding:10px 24px;font-family:var(--mo
   <div id="ft"></div>
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
 function askSecBtn(el){
   var n=el.getAttribute("data-sec");
-  prefill("Analyze the "+n+" sector on June 5 2026 and what investors should know.");
+  prefill("Analyze the "+n+" sector and what investors should know.");
 }
 function askTickBtn(el){
   var n=el.getAttribute("data-name");
   var t=el.getAttribute("data-tick");
-  prefill("Tell me about "+n+" ("+t+") performance on June 5 2026 and what investors should know.");
+  prefill("Tell me about "+n+" ("+t+") and what investors should know.");
 }
 </script>
 <script>
