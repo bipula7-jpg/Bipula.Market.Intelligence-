@@ -362,6 +362,18 @@ def sector_outlook_html(outlook):
 
 
 # ── 4. INJECT INTO HTML ───────────────────────────────────────────────────────
+
+def sanitize_sys(html):
+    """Ensure var SYS never has real newlines — called after every injection."""
+    import re
+    match = re.search(r'var SYS="([\s\S]*?)";', html)
+    if match:
+        raw = match.group(1)
+        if '\n' in raw or '\r' in raw:
+            fixed = raw.replace('\r\n', '\\\\n').replace('\n', '\\\\n').replace('\r', '\\\\n')
+            html = html[:match.start()] + 'var SYS="' + fixed + '";' + html[match.end():]
+    return html
+
 def inject(html, d, ai):
     sp=d["^GSPC"]; nq=d["^IXIC"]; t10=d["^TNX"]; gld=d["GC=F"]; btc=d["BTC-USD"]
 
