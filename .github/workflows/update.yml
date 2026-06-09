@@ -2,7 +2,8 @@ name: Daily Market Data Update
 
 on:
   schedule:
-    - cron: "30 23 * * 1-5"
+    - cron: "30 13 * * 1-5"   # 9:30 AM ET (13:30 UTC) — market open
+    - cron: "30 21 * * 1-5"   # 4:05 PM ET (21:30 UTC) — after close
   workflow_dispatch:
 
 permissions:
