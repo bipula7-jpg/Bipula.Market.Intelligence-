@@ -386,6 +386,7 @@ def inject(html, d, ai):
     # ── Replace ALL date strings (case-insensitive) ──
     # This catches "Jun 8, 2026", "jun 8, 2026", "Jun 5, 2026" etc.
     html = re.sub(r'[Jj]une? \d{1,2},? \d{4}', TODAY, html)
+    html = html.replace('DATESTAMP', TODAY)
     html = re.sub(r'2026-06-\d{2}', TODAY_ISO, html)
     html = re.sub(r'JUN \d{1,2}', f"JUN {now_et.day}", html)
 
