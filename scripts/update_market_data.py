@@ -131,31 +131,35 @@ def call_claude(prompt, max_tokens=1200):
 
 def fetch_rss_news(d):
     """
-    Try live RSS feeds first (works on GitHub Actions).
-    Fall back to smart market-data-driven headlines (always works, no API needed).
+    Fetch real financial headlines from Google News RSS.
+    Searches multiple topics: markets, inflation/CPI, Iran/oil, Fed rates.
+    Falls back to smart market-data generator if RSS unavailable.
     """
-    import xml.etree.ElementTree as ET
-    import urllib.request, time
+    import feedparser, time, re as _re
 
-    RSS_FEEDS = [
-        ("https://news.google.com/rss/search?q=stock+market+inflation+fed&hl=en-US&gl=US&ceid=US:en", "Google News"),
-        ("https://feeds.a.dj.com/rss/RSSMarketsMain.xml", "WSJ Markets"),
-        ("https://www.cnbc.com/id/20910258/device/rss/rss.html", "CNBC Markets"),
-        ("https://feeds.reuters.com/reuters/businessNews", "Reuters Business"),
-        ("https://feeds.marketwatch.com/marketwatch/topstories/", "MarketWatch"),
-        ("https://finance.yahoo.com/rss/topstories", "Yahoo Finance"),
+    # Multiple targeted searches to cover today's big stories
+    SEARCHES = [
+        ("stock market S&P inflation today",          "mac"),
+        ("CPI inflation federal reserve interest rate","rat"),
+        ("Iran war oil prices crude",                 "geo"),
+        ("nasdaq tech stocks earnings",               "eqt"),
+        ("federal reserve fed rate hike cut",         "rat"),
+        ("economy jobs unemployment GDP",             "mac"),
     ]
 
     TAG_MAP = {
-        "inflation": ("MACRO","mac"), "fed": ("RATES","rat"),
-        "rate": ("RATES","rat"), "yield": ("RATES","rat"),
-        "oil": ("COMMODITIES","cmd"), "crude": ("COMMODITIES","cmd"),
-        "gold": ("COMMODITIES","cmd"), "bitcoin": ("EQUITY","eqt"),
-        "tech": ("EQUITY","eqt"), "nvidia": ("EQUITY","eqt"),
-        "nasdaq": ("EQUITY","eqt"), "s&p": ("MACRO","mac"),
-        "iran": ("GEOPOLITICAL","geo"), "war": ("GEOPOLITICAL","geo"),
-        "tariff": ("MACRO","mac"), "jobs": ("MACRO","mac"),
-        "cpi": ("MACRO","mac"), "gdp": ("MACRO","mac"),
+        "inflation": ("MACRO","mac"),    "cpi": ("MACRO","mac"),
+        "fed": ("RATES","rat"),          "rate": ("RATES","rat"),
+        "yield": ("RATES","rat"),        "treasury": ("RATES","rat"),
+        "oil": ("COMMODITIES","cmd"),    "crude": ("COMMODITIES","cmd"),
+        "gold": ("COMMODITIES","cmd"),   "bitcoin": ("EQUITY","eqt"),
+        "crypto": ("EQUITY","eqt"),      "tech": ("EQUITY","eqt"),
+        "nvidia": ("EQUITY","eqt"),      "nasdaq": ("EQUITY","eqt"),
+        "earnings": ("EQUITY","eqt"),    "stock": ("MACRO","mac"),
+        "iran": ("GEOPOLITICAL","geo"),  "war": ("GEOPOLITICAL","geo"),
+        "middle east": ("GEOPOLITICAL","geo"), "tariff": ("MACRO","mac"),
+        "jobs": ("MACRO","mac"),         "gdp": ("MACRO","mac"),
+        "recession": ("MACRO","mac"),    "market": ("MACRO","mac"),
     }
 
     def classify(title):
@@ -165,47 +169,54 @@ def fetch_rss_news(d):
                 return tag, cls
         return "MACRO", "mac"
 
-    def parse_feed(url, source_name):
+    def clean_title(title):
+        # Google News format: "Headline - Source Name"
+        if " - " in title:
+            parts = title.rsplit(" - ", 1)
+            return parts[0].strip(), parts[1].strip()
+        return title.strip(), "Reuters"
+
+    all_items = []
+    seen_titles = set()
+
+    for query, default_cls in SEARCHES:
         try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; SIGNAL-Bot/1.0)"
-            })
-            with urllib.request.urlopen(req, timeout=10) as r:
-                xml_data = r.read()
-            root = ET.fromstring(xml_data)
-            ns = {"atom": "http://www.w3.org/2005/Atom"}
-            items = root.findall(".//item") or root.findall(".//atom:entry", ns)
-            results = []
-            for item in items[:8]:
-                title = (item.findtext("title") or item.findtext("atom:title", namespaces=ns) or "").strip()
-                # Clean Google News title format "Headline - Source"
-                if " - " in title:
-                    parts = title.rsplit(" - ", 1)
-                    title = parts[0].strip()
-                    src = parts[1].strip() if len(parts) > 1 else source_name
-                else:
-                    src = source_name
-                if title and len(title) > 15:
-                    tag, cls = classify(title)
-                    results.append({"tag": tag, "tagClass": cls,
-                                    "headline": title[:120], "source": src,
-                                    "bullish": "", "bearish": ""})
-            return results
+            encoded = query.replace(" ", "+")
+            url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+            feed = feedparser.parse(url)
+            count = 0
+            for entry in feed.entries[:4]:
+                raw_title = entry.get("title", "").strip()
+                if not raw_title or len(raw_title) < 20:
+                    continue
+                title, source = clean_title(raw_title)
+                # Deduplicate
+                title_key = title[:40].lower()
+                if title_key in seen_titles:
+                    continue
+                seen_titles.add(title_key)
+                tag, cls = classify(title)
+                all_items.append({
+                    "tag": tag, "tagClass": cls,
+                    "headline": title[:120],
+                    "source": source,
+                    "bullish": "", "bearish": ""
+                })
+                count += 1
+                if count >= 2:
+                    break
+            if count > 0:
+                print(f"  RSS '{query[:30]}': {count} headlines")
+            time.sleep(0.5)
         except Exception as e:
-            print(f"  RSS {source_name} failed: {e}")
-            return []
+            print(f"  RSS query failed: {e}")
 
-    # Try each RSS feed
-    for url, name in RSS_FEEDS:
-        print(f"  Trying RSS: {name}...")
-        items = parse_feed(url, name)
-        if len(items) >= 4:
-            print(f"  ✅ Got {len(items)} items from {name}")
-            return items[:6]
-        time.sleep(1)
+    if len(all_items) >= 4:
+        print(f"  ✅ Got {len(all_items)} real headlines from Google News RSS")
+        return all_items[:6]
 
-    # All RSS failed - use smart market-data generator
-    print("  ⚠️  All RSS feeds failed — using smart market data headlines")
+    # Fallback to smart generator
+    print("  ⚠️  RSS unavailable — using smart market-data headlines")
     return generate_smart_news(d)
 
 
