@@ -401,14 +401,20 @@ def inject(html, d, ai):
     html = re.sub(r'var SECS=\[[\s\S]*?\];',  f'var SECS={sectors_js(d)};', html)
 
     # SYS prompt — build inline, no newlines
-    sys_val = (f"You are SIGNAL, a financial intelligence platform. Today is {TODAY}. "
-               f"Live data updated via GitHub Actions.\\n"
-               f"S&P 500: {sp[0]:,.2f} ({pct_str(sp[1])})\\n"
-               f"Nasdaq: {nq[0]:,.2f} ({pct_str(nq[1])})\\n"
-               f"10Y Treasury: {t10[0]:.2f}%\\n"
-               f"Gold: ${gld[0]:,.0f}\\nBitcoin: ${btc[0]:,.0f}\\n"
-               f"Fed Rate: 3.75%\\nNot investment advice.")
-    sys_val = sys_val.replace('"', '\\"')
+    # Build SYS as a single line - NO real newlines allowed in JS string
+    sys_val = (
+        f"You are SIGNAL, a financial intelligence platform. Today is {TODAY}. "
+        f"Live data updated via GitHub Actions. "
+        f"S&P 500: {sp[0]:,.2f} ({pct_str(sp[1])}). "
+        f"Nasdaq: {nq[0]:,.2f} ({pct_str(nq[1])}). "
+        f"10Y Treasury: {t10[0]:.2f}%. "
+        f"Gold: ${gld[0]:,.0f}. Bitcoin: ${btc[0]:,.0f}. "
+        f"Fed Rate: 3.75%. Not investment advice."
+    )
+    # Remove ALL characters that break JS strings
+    sys_val = sys_val.replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
+    # Final safety: strip any actual newlines
+    sys_val = ' '.join(sys_val.split())
     html = re.sub(r'var SYS="[^"]*";', f'var SYS="{sys_val}";', html)
 
     # Chart label
@@ -494,6 +500,15 @@ def main():
         html = f.read()
 
     html = inject(html, d, ai)
+
+    # Final sanitize pass - nuke any SYS newlines before saving
+    import re as _re
+    _m = _re.search(r'var SYS="([\s\S]*?)";', html)
+    if _m and ('\n' in _m.group(1) or '\r' in _m.group(1)):
+        _raw = _m.group(1)
+        _fixed = _raw.replace('\r\n',' ').replace('\n',' ').replace('\r',' ')
+        html = html[:_m.start()] + 'var SYS="' + _fixed + '";' + html[_m.end():]
+        print("  ✅ Final SYS sanitize applied")
 
     with open(html_path, "w") as f:
         f.write(html)
