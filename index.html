@@ -141,6 +141,27 @@ nav{position:sticky;top:0;z-index:999;background:rgba(7,9,15,.97);border-bottom:
 .ibuy-rating.strong-buy{background:rgba(61,214,140,.1);color:var(--green);border:1px solid rgba(61,214,140,.2)}
 .ibuy-rating.buy{background:rgba(31,212,236,.08);color:var(--cyan);border:1px solid rgba(31,212,236,.2)}
 .ibuy-target{font-size:10px;color:var(--text3)}
+/* INTRADAY CHART */
+.intra-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px}
+.intra-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px}
+.intra-sym{font-size:13px;font-weight:700;color:var(--text)}
+.intra-meta{font-family:var(--mono);font-size:11px}
+/* ECONOMIC CALENDAR */
+.eco-cal{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.eco-item{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;display:flex;align-items:center;gap:11px}
+.eco-item.today{border-color:var(--amber);background:rgba(245,166,35,.04)}
+.eco-item.past{opacity:.45}
+.eco-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.eco-dot.high{background:var(--red)}.eco-dot.med{background:var(--amber)}.eco-dot.low{background:var(--cyan)}
+.eco-date{font-family:var(--mono);font-size:10px;color:var(--text3);flex-shrink:0;width:72px}
+.eco-name{font-size:12px;font-weight:600;color:var(--text);flex:1;line-height:1.3}
+.eco-tag{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;flex-shrink:0;border:1px solid}
+.eco-tag.fed{color:var(--purple);border-color:rgba(155,127,245,.3);background:rgba(155,127,245,.08)}
+.eco-tag.jobs{color:var(--green);border-color:rgba(61,214,140,.3);background:rgba(61,214,140,.08)}
+.eco-tag.inflation{color:var(--red);border-color:rgba(240,107,107,.3);background:rgba(240,107,107,.08)}
+.eco-tag.growth{color:var(--cyan);border-color:rgba(31,212,236,.3);background:rgba(31,212,236,.08)}
+.eco-tag.other{color:var(--text2);border-color:var(--border2);background:none}
+.eco-when{font-family:var(--mono);font-size:10px;color:var(--text3);flex-shrink:0;min-width:58px;text-align:right}
 /* TOAST */
 .toast{position:fixed;top:64px;right:18px;z-index:9999;background:var(--bg2);border-radius:9px;padding:13px 16px;font-family:var(--mono);font-size:11px;min-width:220px;max-width:300px;box-shadow:0 4px 24px rgba(0,0,0,.5);animation:tIn .3s ease;pointer-events:none}
 @keyframes tIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
@@ -240,7 +261,25 @@ footer{border-top:1px solid var(--border);padding:8px 20px;font-family:var(--mon
         <div class="card"><div class="c-lbl">10Y Treasury</div><div class="c-val fl" id="m-10y-p">—</div><div class="c-chg fl" id="m-10y-c">—</div><div class="c-src">US Treasury</div></div>
         <div class="card"><div class="c-lbl">5Y Treasury</div><div class="c-val fl" id="m-5y-p">—</div><div class="c-chg fl" id="m-5y-c">—</div><div class="c-src">US Treasury</div></div>
         <div class="card"><div class="c-lbl">30Y Treasury</div><div class="c-val fl" id="m-30y-p">—</div><div class="c-chg fl" id="m-30y-c">—</div><div class="c-src">US Treasury</div></div>
+        <div class="card"><div class="c-lbl">US Dollar (DXY)</div><div class="c-val" id="m-dxy-p">—</div><div class="c-chg" id="m-dxy-c">—</div><div class="c-src">Dollar Index Futures</div></div>
+        <div class="card"><div class="c-lbl">Bitcoin (BTC)</div><div class="c-val" id="m-btc-p">—</div><div class="c-chg" id="m-btc-c">—</div><div class="c-src">Yahoo Finance</div></div>
+        <div class="card"><div class="c-lbl">Ethereum (ETH)</div><div class="c-val" id="m-eth-p">—</div><div class="c-chg" id="m-eth-c">—</div><div class="c-src">Yahoo Finance</div></div>
       </div>
+
+      <!-- SPY Intraday Chart -->
+      <div class="hdr"><div class="hdr-title">SPY — Today's Price Action</div><div class="src-badge" id="intra-badge">5-MIN · LIVE</div></div>
+      <div class="intra-wrap">
+        <div class="intra-top">
+          <div><span class="intra-sym">SPY</span><span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-left:10px">S&amp;P 500 ETF · Intraday</span></div>
+          <div class="intra-meta"><span class="up" id="intra-price">—</span>&nbsp;<span style="color:var(--text3)" id="intra-chg">—</span></div>
+        </div>
+        <canvas id="intradayChart" height="130"></canvas>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:8px;text-align:right" id="intra-status">Loading intraday data…</div>
+      </div>
+
+      <!-- Economic Calendar -->
+      <div class="hdr"><div class="hdr-title">Upcoming Economic Events</div><div class="src-badge">HIGH-IMPACT · AUTO-CALC</div></div>
+      <div class="eco-cal" id="eco-cal"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);padding:10px">Loading calendar…</div></div>
     </div>
 
     <!-- ═══ SECTORS ═══ -->
@@ -350,7 +389,12 @@ footer{border-top:1px solid var(--border);padding:8px 20px;font-family:var(--mon
 // ═══════════════════════════════════════════════
 // GLOBALS
 // ═══════════════════════════════════════════════
-var PROXIES = ['', 'https://corsproxy.io/?url=', 'https://api.allorigins.win/raw?url='];
+var PROXIES = [
+  '',
+  'https://corsproxy.io/?url=',
+  'https://api.allorigins.win/raw?url=',
+  'https://api.codetabs.com/v1/proxy?quest='
+];
 var liveQuotes = {};
 var prevMarketStatus = null;
 var bellEnabled = false;
@@ -566,31 +610,75 @@ function toast(msg, color) {
 // ═══════════════════════════════════════════════
 // YAHOO FINANCE FETCH
 // ═══════════════════════════════════════════════
+// ── Batch fetch via v7 multi-quote (query2 = less restricted) ──
+async function fetchMultiQuote(symbols) {
+  var bases = [
+    'https://query2.finance.yahoo.com',
+    'https://query1.finance.yahoo.com'
+  ];
+  for (var b=0; b<bases.length; b++) {
+    var path = bases[b]+'/v7/finance/quote?symbols='+encodeURIComponent(symbols.join(','))
+      +'&fields=regularMarketPrice,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent';
+    for (var i=0; i<PROXIES.length; i++) {
+      try {
+        var url = PROXIES[i] ? PROXIES[i]+encodeURIComponent(path) : path;
+        var r = await fetch(url, {headers:{'Accept':'application/json'}});
+        if (!r.ok) continue;
+        var data = await r.json();
+        var items = data&&data.quoteResponse&&data.quoteResponse.result;
+        if (!items||!items.length) continue;
+        var q = {};
+        items.forEach(function(it){
+          var price = it.regularMarketPrice;
+          if (!price) return;
+          var prev = it.regularMarketPreviousClose||price;
+          var chg = it.regularMarketChange||(price-prev);
+          var chgPct = it.regularMarketChangePercent||((prev?(chg/prev)*100:0));
+          q[it.symbol] = {sym:it.symbol, price:price, change:chg, changePct:chgPct, ok:true};
+        });
+        if (Object.keys(q).length>0) return q;
+      } catch(e) {}
+    }
+  }
+  return null;
+}
+
+// ── Single symbol fallback via v8 chart ──
 async function fetchQ(symbol) {
   var enc = encodeURIComponent(symbol);
-  var path = 'https://query1.finance.yahoo.com/v8/finance/chart/'+enc+'?range=1d&interval=1d&includePrePost=false';
-  for (var i=0; i<PROXIES.length; i++) {
-    try {
-      var url = PROXIES[i] ? PROXIES[i]+encodeURIComponent(path) : path;
-      var r = await fetch(url, {headers:{'Accept':'application/json'}});
-      if (!r.ok) continue;
-      var data = await r.json();
-      var res = data&&data.chart&&data.chart.result&&data.chart.result[0];
-      if (!res) continue;
-      var meta = res.meta;
-      var price = meta.regularMarketPrice;
-      if (!price) continue;
-      var prev = meta.chartPreviousClose||meta.previousClose||price;
-      var chg = price-prev, chgPct = prev?(chg/prev)*100:0;
-      return {sym:symbol, price:price, change:chg, changePct:chgPct, ok:true};
-    } catch(e) {}
+  var paths = [
+    'https://query2.finance.yahoo.com/v8/finance/chart/'+enc+'?range=1d&interval=1d&includePrePost=false',
+    'https://query1.finance.yahoo.com/v8/finance/chart/'+enc+'?range=1d&interval=1d&includePrePost=false'
+  ];
+  for (var p=0; p<paths.length; p++) {
+    for (var i=0; i<PROXIES.length; i++) {
+      try {
+        var url = PROXIES[i] ? PROXIES[i]+encodeURIComponent(paths[p]) : paths[p];
+        var r = await fetch(url, {headers:{'Accept':'application/json'}});
+        if (!r.ok) continue;
+        var data = await r.json();
+        var res = data&&data.chart&&data.chart.result&&data.chart.result[0];
+        if (!res) continue;
+        var meta = res.meta;
+        var price = meta.regularMarketPrice;
+        if (!price) continue;
+        var prev = meta.chartPreviousClose||meta.previousClose||price;
+        var chg = price-prev, chgPct = prev?(chg/prev)*100:0;
+        return {sym:symbol, price:price, change:chg, changePct:chgPct, ok:true};
+      } catch(e) {}
+    }
   }
   return {sym:symbol, ok:false};
 }
 
 async function fetchAll() {
   var syms = ['SPY','QQQ','DIA','IWM','GLD','USO','^VIX','^TNX','^TYX','^FVX','^IRX',
+              'DX=F','BTC-USD','ETH-USD',
               'XLK','XLV','XLF','XLI','XLE','XLC','XLB','XLY','XLP','XLRE','XLU'];
+  // Try batch first — one request for everything
+  var batch = await fetchMultiQuote(syms);
+  if (batch && Object.keys(batch).length >= 5) return batch;
+  // Batch failed — fall back to individual per-symbol fetches
   var results = await Promise.allSettled(syms.map(fetchQ));
   var q = {};
   results.forEach(function(r){
@@ -702,6 +790,14 @@ function updateDOM(q) {
   updCard('m-10y-p','m-10y-c', q['^TNX'], true);
   updCard('m-5y-p', 'm-5y-c',  q['^FVX'], true);
   updCard('m-30y-p','m-30y-c', q['^TYX'], true);
+  updCard('m-dxy-p','m-dxy-c', q['DX=F']);
+  updCard('m-btc-p','m-btc-c', q['BTC-USD']);
+  updCard('m-eth-p','m-eth-c', q['ETH-USD']);
+  // Update intraday price display from quote
+  if (q['SPY']) {
+    setEl('intra-price', fmtP(q['SPY'].price), cls(q['SPY'].changePct));
+    setEl('intra-chg', fmtPct(q['SPY'].changePct)+' today', cls(q['SPY'].changePct));
+  }
   updSide('s-spy', q['SPY']); updSide('s-qqq', q['QQQ']);
   updSide('s-dia', q['DIA']); updSide('s-iwm', q['IWM']);
   updSide('s-gld', q['GLD']); updSide('s-uso', q['USO']);
@@ -753,22 +849,68 @@ function classifyNews(title) {
 
 var TAG_LABELS = {mac:'MACRO', geo:'GEO-POL', ai:'AI', eqt:'MARKETS', cmd:'COMMODITIES'};
 
+// RSS via rss2json (primary)
+async function fetchRSSviaJSON(feedUrl) {
+  var apis = [
+    'https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=8',
+    'https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=8&api_key='
+  ];
+  for (var i=0; i<apis.length; i++) {
+    try {
+      var r = await fetch(apis[i]);
+      if (!r.ok) continue;
+      var data = await r.json();
+      if (!data.items||!data.items.length) continue;
+      return data.items.map(function(item){
+        return {
+          title: (item.title||'').replace(/<[^>]+>/g,'').trim(),
+          link: item.link||'#',
+          pub: item.pubDate||'',
+          source: data.feed&&data.feed.title ? data.feed.title : feedUrl,
+          tag: classifyNews(item.title||'')
+        };
+      });
+    } catch(e) {}
+  }
+  return null;
+}
+
+// RSS via raw XML proxy (fallback when rss2json is rate-limited)
+async function fetchRSSviaXML(feedUrl) {
+  for (var i=1; i<PROXIES.length; i++) { // skip direct — RSS has CORS
+    try {
+      var url = PROXIES[i]+encodeURIComponent(feedUrl);
+      var r = await fetch(url);
+      if (!r.ok) continue;
+      var xml = await r.text();
+      var doc = new DOMParser().parseFromString(xml, 'text/xml');
+      var items = Array.from(doc.querySelectorAll('item'));
+      if (!items.length) continue;
+      var feedTitle = (doc.querySelector('channel > title')||{}).textContent||feedUrl;
+      return items.slice(0,8).map(function(item){
+        var title = (item.querySelector('title')||{}).textContent||'';
+        var link = (item.querySelector('link')||{}).textContent
+          || (item.querySelector('link')||{}).getAttribute('href')||'#';
+        var pub = (item.querySelector('pubDate')||{}).textContent||'';
+        return {
+          title: title.replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').trim(),
+          link: link.trim(),
+          pub: pub.trim(),
+          source: feedTitle.trim(),
+          tag: classifyNews(title)
+        };
+      }).filter(function(n){return n.title.length>0;});
+    } catch(e) {}
+  }
+  return null;
+}
+
 async function fetchRSS(feedUrl) {
-  var apiUrl = 'https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=8';
-  try {
-    var r = await fetch(apiUrl);
-    if (!r.ok) return [];
-    var data = await r.json();
-    return (data.items||[]).map(function(item){
-      return {
-        title: (item.title||'').replace(/<[^>]+>/g,'').trim(),
-        link: item.link||'#',
-        pub: item.pubDate||'',
-        source: data.feed&&data.feed.title ? data.feed.title : feedUrl,
-        tag: classifyNews(item.title||'')
-      };
-    });
-  } catch(e) { return []; }
+  var result = await fetchRSSviaJSON(feedUrl);
+  if (result && result.length) return result;
+  result = await fetchRSSviaXML(feedUrl);
+  if (result && result.length) return result;
+  return [];
 }
 
 async function loadNews() {
@@ -1017,6 +1159,180 @@ async function loadIBuys() {
 }
 
 // ═══════════════════════════════════════════════
+// INTRADAY CHART — SPY 5-min bars
+// ═══════════════════════════════════════════════
+var intradayChartInst = null;
+
+async function fetchIntraday() {
+  var path = 'https://query2.finance.yahoo.com/v8/finance/chart/SPY?range=1d&interval=5m&includePrePost=false';
+  for (var i=0; i<PROXIES.length; i++) {
+    try {
+      var url = PROXIES[i] ? PROXIES[i]+encodeURIComponent(path) : path;
+      var r = await fetch(url, {headers:{'Accept':'application/json'}});
+      if (!r.ok) continue;
+      var data = await r.json();
+      var res = data&&data.chart&&data.chart.result&&data.chart.result[0];
+      if (!res||!res.timestamp) continue;
+      var ts = res.timestamp;
+      var closes = res.indicators.quote[0].close;
+      var labels=[], vals=[];
+      for (var j=0; j<ts.length; j++) {
+        if (closes[j]==null) continue;
+        var d = new Date(ts[j]*1000);
+        labels.push(d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}));
+        vals.push(+closes[j].toFixed(2));
+      }
+      return {labels:labels, vals:vals};
+    } catch(e) {}
+  }
+  return null;
+}
+
+async function buildIntradayChart() {
+  var badge = document.getElementById('intra-badge');
+  var status = document.getElementById('intra-status');
+  var ms = getMarketStatus();
+  if (ms.s==='closed'&&ms.l==='CLOSED'&&!isWeekend()) {
+    // Weekend — show message
+    if(status) status.textContent = 'Market closed — intraday chart shows last session data';
+  }
+  var data = await fetchIntraday();
+  if (!data||!data.vals.length) {
+    if(status) status.textContent = 'Intraday data unavailable';
+    return;
+  }
+  var ctx = document.getElementById('intradayChart');
+  if (!ctx) return;
+  if (intradayChartInst) intradayChartInst.destroy();
+  var first = data.vals[0];
+  var isUp = data.vals[data.vals.length-1] >= first;
+  var lineColor = isUp ? '#3dd68c' : '#f06b6b';
+  var fillColor = isUp ? 'rgba(61,214,140,.07)' : 'rgba(240,107,107,.07)';
+  intradayChartInst = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: data.labels,
+      datasets:[{
+        label:'SPY',data:data.vals,
+        borderColor:lineColor,backgroundColor:fillColor,
+        borderWidth:1.5,pointRadius:0,tension:.3,fill:true
+      }]
+    },
+    options:{
+      responsive:true,animation:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return '$'+c.parsed.y.toFixed(2);}}}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#3d5068',font:{family:'IBM Plex Mono',size:9},maxTicksLimit:8,maxRotation:0}},
+        y:{grid:{color:'rgba(28,42,62,.6)'},ticks:{color:'#3d5068',font:{family:'IBM Plex Mono',size:9},callback:function(v){return '$'+v.toFixed(0);}},position:'right'}
+      }
+    }
+  });
+  var pts = data.vals.length;
+  var last = data.vals[pts-1];
+  var pctChg = ((last-first)/first*100);
+  if(status) status.textContent = pts+' data points · Open: $'+fmtP(first)+' · Now: $'+fmtP(last)+' · Session: '+fmtPct(pctChg);
+  if(badge) badge.textContent = '5-MIN · '+data.labels[data.labels.length-1]+' ET';
+}
+
+function isWeekend() { var d=getET().getDay(); return d===0||d===6; }
+
+// ═══════════════════════════════════════════════
+// ECONOMIC CALENDAR
+// ═══════════════════════════════════════════════
+function buildEconCalendar() {
+  var now = getET();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var events = [];
+
+  // FOMC 2025-2026 decision dates (Fed releases at 2:00 PM ET)
+  var fomcDates = [
+    '2025-07-30','2025-09-17','2025-10-29','2025-12-10',
+    '2026-01-28','2026-03-18','2026-05-06','2026-06-17',
+    '2026-07-29','2026-09-16','2026-10-28','2026-12-09'
+  ];
+  fomcDates.forEach(function(d){
+    events.push({date:new Date(d), name:'FOMC Rate Decision', tag:'fed', impact:'high', note:'Federal Reserve'});
+  });
+
+  // NFP (Non-Farm Payrolls) — first Friday of each month, 8:30 AM ET
+  for (var mo=0; mo<6; mo++) {
+    var m = new Date(now.getFullYear(), now.getMonth()+mo, 1);
+    var firstFri = new Date(m.getFullYear(), m.getMonth(), 1+(5-m.getDay()+7)%7);
+    if (firstFri.getDate()===1) firstFri.setDate(8); // avoid first day being Friday of prior month
+    events.push({date:firstFri, name:'Jobs Report (Non-Farm Payrolls)', tag:'jobs', impact:'high', note:'BLS · 8:30 AM ET'});
+  }
+
+  // CPI — approx 2nd or 3rd Wednesday each month, 8:30 AM ET
+  for (var mo=0; mo<5; mo++) {
+    var m = new Date(now.getFullYear(), now.getMonth()+mo, 1);
+    var firstWed = 1+(3-m.getDay()+7)%7;
+    var cpiDay = firstWed<8 ? firstWed+7 : firstWed; // aim for 2nd Wednesday
+    events.push({date:new Date(m.getFullYear(),m.getMonth(),cpiDay+3), name:'CPI Inflation Report', tag:'inflation', impact:'high', note:'BLS · 8:30 AM ET'});
+  }
+
+  // GDP — quarterly advance estimate ~4 weeks after quarter end
+  var gdpDates = ['2025-07-30','2025-10-29','2026-01-28','2026-04-29','2026-07-29'];
+  gdpDates.forEach(function(d){
+    events.push({date:new Date(d), name:'GDP Advance Estimate', tag:'growth', impact:'high', note:'BEA · 8:30 AM ET'});
+  });
+
+  // PCE (Fed's preferred inflation gauge) — last business day of month
+  for (var mo=0; mo<4; mo++) {
+    var lastDay = new Date(now.getFullYear(), now.getMonth()+mo+1, 0);
+    while(lastDay.getDay()===0||lastDay.getDay()===6) lastDay.setDate(lastDay.getDate()-1);
+    events.push({date:lastDay, name:'PCE Price Index', tag:'inflation', impact:'med', note:'BEA · 8:30 AM ET'});
+  }
+
+  // Deduplicate and sort
+  var seen={};
+  events = events.filter(function(e){
+    var k=e.date.toDateString()+e.name;
+    if(seen[k]) return false; seen[k]=true; return true;
+  });
+  events.sort(function(a,b){return a.date-b.date;});
+
+  // Split: past (last 2), upcoming (next 8)
+  var past=[], upcoming=[];
+  events.forEach(function(e){
+    var eDay = new Date(e.date.getFullYear(),e.date.getMonth(),e.date.getDate());
+    if(eDay < today) past.push(e);
+    else upcoming.push(e);
+  });
+  var display = past.slice(-1).concat(upcoming.slice(0,8));
+
+  var html='';
+  display.forEach(function(e){
+    var eDay = new Date(e.date.getFullYear(),e.date.getMonth(),e.date.getDate());
+    var isPast = eDay < today;
+    var isToday = eDay.toDateString()===today.toDateString();
+    var mo = MONTHS[e.date.getMonth()];
+    var dy = e.date.getDate();
+    var dayName = DAYS[e.date.getDay()].substring(0,3);
+    var dateStr = dayName+', '+mo+' '+dy;
+    var diff = Math.round((eDay-today)/(1000*60*60*24));
+    var when = isPast ? 'Past' : (isToday ? 'TODAY' : (diff===1?'Tomorrow':diff+'d away'));
+    var whenStyle = isToday ? 'color:var(--amber)' : (isPast?'color:var(--text3)':'');
+    html+='<div class="eco-item'+(isToday?' today':'')+(isPast?' past':'')+'">'
+      +'<div class="eco-dot '+e.impact+'"></div>'
+      +'<div class="eco-date">'+dateStr+'</div>'
+      +'<div style="flex:1"><div class="eco-name">'+e.name+'</div>'
+      +'<div style="font-family:var(--mono);font-size:9px;color:var(--text3)">'+e.note+'</div></div>'
+      +'<span class="eco-tag '+e.tag+'">'+e.tag.toUpperCase()+'</span>'
+      +'<div class="eco-when" style="'+whenStyle+'">'+when+'</div>'
+      +'</div>';
+  });
+
+  // Legend
+  html+='<div style="display:flex;gap:14px;padding:6px 4px;font-family:var(--mono);font-size:9px;color:var(--text3)">'
+    +'<span><span style="color:var(--red)">●</span> HIGH IMPACT</span>'
+    +'<span><span style="color:var(--amber)">●</span> MEDIUM</span>'
+    +'<span style="margin-left:auto">Dates approximate — verify with BLS / Fed calendar</span></div>';
+
+  var el = document.getElementById('eco-cal');
+  if(el) el.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════
 // MAIN REFRESH
 // ═══════════════════════════════════════════════
 var refreshing = false;
@@ -1055,12 +1371,24 @@ updateClock();
 setInterval(updateClock, 1000);
 
 refresh();
-// Refresh every 60s during market hours, 5min otherwise
+buildEconCalendar();
+buildIntradayChart();
+
+// Refresh prices every 60s during market hours, 5min otherwise
 setInterval(function(){
   var ms = getMarketStatus();
   if (ms.s==='open'||ms.s==='premarket'||ms.s==='afterhours') refresh();
 }, 60000);
 setInterval(refresh, 300000);
+
+// Refresh intraday chart every 5 min during market hours
+setInterval(function(){
+  var ms = getMarketStatus();
+  if (ms.s==='open') buildIntradayChart();
+}, 5*60000);
+
+// Rebuild calendar once per day (midnight ET)
+setInterval(buildEconCalendar, 60*60000);
 
 // Refresh news every 15 minutes in background
 setInterval(function(){
