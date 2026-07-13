@@ -1,48 +1,37 @@
-name: Daily Market Data Update
+name: Daily Keep-Alive
+
+# The index.html now fetches live data directly from Yahoo Finance
+# in the browser — no build step needed. This workflow simply touches
+# the file once a day so GitHub Pages re-deploys and the date stays
+# current. It will NEVER fail because it has no external API dependency.
 
 on:
   schedule:
-    - cron: "30 13 * * 1-5"   # 9:30 AM ET (13:30 UTC) — market open
-    - cron: "30 21 * * 1-5"   # 4:05 PM ET (21:30 UTC) — after close
-  workflow_dispatch:
-
-permissions:
-  contents: write
+    - cron: '30 14 * * 1-5'   # 10:30 AM ET Mon-Fri (after market opens)
+  workflow_dispatch:            # manual trigger anytime
 
 jobs:
-  update-market-data:
+  ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    permissions:
+      contents: write
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run market data update
-        run: python scripts/update_market_data.py
-
-      - name: Commit and push updated index.html
+      - name: Stamp date into HTML comment
         run: |
-          git config user.name  "SIGNAL Bot"
-          git config user.email "signal-bot@users.noreply.github.com"
+          DATE=$(TZ="America/New_York" date +'%Y-%m-%d %H:%M ET')
+          # Insert/update a build timestamp comment in index.html
+          sed -i "s|<!-- built:.*-->|<!-- built: $DATE -->|g" index.html
+          # If no comment exists yet, append one before </body>
+          grep -q "<!-- built:" index.html || \
+            sed -i "s|</body>|<!-- built: $DATE -->\n</body>|" index.html
+
+      - name: Commit if changed
+        run: |
+          git config user.name "SIGNAL Bot"
+          git config user.email "signal@users.noreply.github.com"
           git add index.html
-          git diff --staged --quiet || git commit -m "📊 Market data update — $(date -u +'%Y-%m-%d')"
+          git diff --staged --quiet || git commit -m "Daily stamp $(TZ='America/New_York' date +'%Y-%m-%d')"
           git push
