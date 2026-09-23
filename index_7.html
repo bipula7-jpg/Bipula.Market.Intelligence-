@@ -145,6 +145,8 @@ footer{border-top:1px solid var(--border);padding:8px 20px;font-family:var(--mon
         {"proName":"TVC:VIX","title":"VIX"},
         {"proName":"FOREXCOM:XAUUSD","title":"Gold"},
         {"proName":"TVC:USOIL","title":"WTI Oil"},
+        {"proName":"TVC:US10Y","title":"10Y Yield"},
+        {"proName":"TVC:DXY","title":"US Dollar"},
         {"proName":"BITSTAMP:BTCUSD","title":"Bitcoin"},
         {"proName":"BITSTAMP:ETHUSD","title":"Ethereum"}
       ],
@@ -168,15 +170,6 @@ footer{border-top:1px solid var(--border);padding:8px 20px;font-family:var(--mon
       <div class="src-badge">TRADINGVIEW · LIVE</div>
     </div>
 
-    <!-- Bloomberg Live -->
-    <div class="hdr"><div class="hdr-title">Bloomberg — Live</div><div class="src-badge">FREE PUBLIC STREAM</div></div>
-    <div class="tv-box" style="position:relative;padding-bottom:42%;height:0;overflow:hidden;background:#000">
-      <iframe src="https://www.youtube.com/embed/QB5BNdBFujE?autoplay=0" title="Bloomberg Business News Live"
-        style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-    </div>
-    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin:4px 0 10px">Embedded from Bloomberg's official public YouTube channel. Not affiliated with or endorsed by Bloomberg L.P.</div>
-
     <!-- Market Overview: Indices + Commodities + Bonds + Crypto -->
     <div class="tv-box tv-box-pad">
       <div class="tradingview-widget-container" style="height:480px">
@@ -199,35 +192,17 @@ footer{border-top:1px solid var(--border);padding:8px 20px;font-family:var(--mon
               {"s":"FOREXCOM:XAUUSD","d":"Gold"},{"s":"TVC:USOIL","d":"WTI Oil"},
               {"s":"FOREXCOM:XAGUSD","d":"Silver"},{"s":"TVC:NATGAS","d":"Nat. Gas"}
             ],"originalTitle":"Commodities"},
+            {"title":"Bonds","symbols":[
+              {"s":"TVC:US10Y","d":"US 10Y"},{"s":"TVC:US30Y","d":"US 30Y"},
+              {"s":"TVC:US05Y","d":"US 5Y"},{"s":"TVC:US02Y","d":"US 2Y"},
+              {"s":"TVC:DXY","d":"US Dollar"}
+            ],"originalTitle":"Bonds"},
             {"title":"Crypto","symbols":[
               {"s":"BITSTAMP:BTCUSD","d":"Bitcoin"},{"s":"BITSTAMP:ETHUSD","d":"Ethereum"},
               {"s":"COINBASE:SOLUSD","d":"Solana"},{"s":"BINANCE:BNBUSD","d":"BNB"}
             ],"originalTitle":"Crypto"}
           ]
         }
-        </script>
-      </div>
-    </div>
-
-    <!-- Yields & Dollar — Mini Chart widgets (chart-based feed, not gated like live-quote widgets) -->
-    <div class="hdr"><div class="hdr-title">Yields &amp; Dollar</div><div class="src-badge">TRADINGVIEW · LIVE</div></div>
-    <div class="tv-box tv-box-pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:US10Y","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:US02Y","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:DXY","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
         </script>
       </div>
     </div>
@@ -308,66 +283,30 @@ footer{border-top:1px solid var(--border);padding:8px 20px;font-family:var(--mon
   <div class="page" id="pg-rates">
     <div class="hdr"><div class="hdr-title">Fixed Income &amp; Yield Curve</div><div class="src-badge">US TREASURY · LIVE</div></div>
 
-    <!-- Yield Curve — Mini Chart grid (chart-based feed works reliably for these symbols; the live-quote Market Overview widget does not) -->
-    <div class="hdr"><div class="hdr-title">U.S. Treasury Yields</div><div class="src-badge">TRADINGVIEW · LIVE</div></div>
-    <div class="tv-box tv-box-pad" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
-      <div class="tradingview-widget-container" style="height:150px">
+    <!-- Bond market overview -->
+    <div class="tv-box tv-box-pad">
+      <div class="tradingview-widget-container" style="height:420px">
         <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:US01Y","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:US02Y","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:US05Y","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:US10Y","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:US30Y","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-    </div>
-
-    <!-- Spreads & Dollar — Mini Chart grid -->
-    <div class="hdr" style="margin-top:6px"><div class="hdr-title">Spreads, Fed Funds &amp; Dollar</div><div class="src-badge">FRED · TRADINGVIEW</div></div>
-    <div class="tv-box tv-box-pad" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"FRED:T10Y2Y","width":"100%","height":150,"locale":"en","dateRange":"3M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"FRED:T10Y3M","width":"100%","height":150,"locale":"en","dateRange":"3M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"FRED:FEDFUNDS","width":"100%","height":150,"locale":"en","dateRange":"3M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
-        </script>
-      </div>
-      <div class="tradingview-widget-container" style="height:150px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-        {"symbol":"TVC:DXY","width":"100%","height":150,"locale":"en","dateRange":"1M","colorTheme":"dark","isTransparent":true,"autosize":true,"largeChartUrl":""}
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
+        {
+          "colorTheme":"dark","dateRange":"1D","showChart":true,
+          "locale":"en","isTransparent":true,"showSymbolLogo":false,
+          "plotLineColorGrowing":"rgba(31,212,236,1)","plotLineColorFalling":"rgba(240,107,107,1)",
+          "gridLineColor":"rgba(28,42,62,1)","scaleFontColor":"rgba(61,80,104,1)",
+          "belowLineFillColorGrowing":"rgba(31,212,236,.08)","belowLineFillColorFalling":"rgba(240,107,107,.08)",
+          "tabs":[
+            {"title":"Yields","symbols":[
+              {"s":"TVC:US01Y","d":"1Y"},{"s":"TVC:US02Y","d":"2Y"},
+              {"s":"TVC:US05Y","d":"5Y"},{"s":"TVC:US10Y","d":"10Y"},
+              {"s":"TVC:US30Y","d":"30Y"}
+            ],"originalTitle":"Yields"},
+            {"title":"Spreads","symbols":[
+              {"s":"FRED:T10Y2Y","d":"10Y-2Y Spread"},
+              {"s":"FRED:T10Y3M","d":"10Y-3M Spread"},
+              {"s":"FRED:FEDFUNDS","d":"Fed Funds Rate"}
+            ],"originalTitle":"Spreads"}
+          ]
+        }
         </script>
       </div>
     </div>
@@ -426,45 +365,30 @@ footer{border-top:1px solid var(--border);padding:8px 20px;font-family:var(--mon
 
   <!-- ══ NEWS ══ -->
   <div class="page" id="pg-news">
-    <div class="hdr"><div class="hdr-title">Markets News · <span id="news-date">—</span></div><div class="src-badge">TRADINGVIEW · REAL-TIME</div></div>
+    <div class="hdr"><div class="hdr-title">Live Market News · <span id="news-date">—</span></div><div class="src-badge">TRADINGVIEW · REAL-TIME</div></div>
     <div class="tv-box tv-box-pad">
-      <div class="tradingview-widget-container" style="height:420px">
-        <div class="tradingview-widget-container__widget" style="height:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
-        {
-          "feedMode":"market","market":"index",
-          "colorTheme":"dark","isTransparent":true,
-          "displayMode":"regular","width":"100%","height":420,"locale":"en"
-        }
-        </script>
-      </div>
-    </div>
-
-    <!-- Corporate Activity -->
-    <div class="hdr"><div class="hdr-title">Corporate Activity</div><div class="src-badge">EARNINGS &middot; M&amp;A &middot; GUIDANCE</div></div>
-    <div class="tv-box tv-box-pad">
-      <div class="tradingview-widget-container" style="height:420px">
+      <div class="tradingview-widget-container" style="height:600px">
         <div class="tradingview-widget-container__widget" style="height:100%"></div>
         <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
         {
           "feedMode":"market","market":"stock",
           "colorTheme":"dark","isTransparent":true,
-          "displayMode":"regular","width":"100%","height":420,"locale":"en"
+          "displayMode":"regular","width":"100%","height":600,"locale":"en"
         }
         </script>
       </div>
     </div>
 
-    <!-- Economics & Rates -->
-    <div class="hdr"><div class="hdr-title">Economics &amp; Rates</div><div class="src-badge">FED &middot; INFLATION &middot; TREASURY</div></div>
+    <!-- Macro / Forex news -->
+    <div class="hdr"><div class="hdr-title">Macro &amp; Forex News</div></div>
     <div class="tv-box tv-box-pad">
-      <div class="tradingview-widget-container" style="height:420px">
+      <div class="tradingview-widget-container" style="height:400px">
         <div class="tradingview-widget-container__widget" style="height:100%"></div>
         <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
         {
-          "feedMode":"market","market":"bond",
+          "feedMode":"market","market":"forex",
           "colorTheme":"dark","isTransparent":true,
-          "displayMode":"regular","width":"100%","height":420,"locale":"en"
+          "displayMode":"regular","width":"100%","height":400,"locale":"en"
         }
         </script>
       </div>
